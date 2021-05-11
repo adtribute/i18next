@@ -1,5 +1,5 @@
 {
-  "name": "i18next-maestroqa",
+  "name": "i18next-maestroqa-2",
   "version": "20.2.2",
   "description": "i18next internationalization framework",
   "main": "./dist/cjs/i18next.js",
