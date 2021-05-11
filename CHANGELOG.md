@@ -1,3 +1,90 @@
+### 20.2.2
+
+- fix plural equations for Kazakh [1608](https://github.com/i18next/i18next/pull/1608)
+
+### 20.2.1
+
+- fix lastIndex in regex when skipOnVariables is true
+
+### 20.2.0
+
+- add ignoreJSONStructure into the types
+- stop recursive interpolation also for "{{variable}}" when skipOnVariables is true [1595](https://github.com/i18next/i18next/issues/1595)
+- old browser fix for "includes" usage [1597](https://github.com/i18next/i18next/pull/1597)
+
+### 20.1.0
+
+- Add alwaysFormat into the types [1586](https://github.com/i18next/i18next/pull/1586)
+- Add interpolation key name to format function [1571](https://github.com/i18next/i18next/pull/1571)
+
+### 20.0.0
+
+- add support to proper augment PluginOptions type [1583](https://github.com/i18next/i18next/pull/1583)
+- introduce ignoreJSONStructure flag, to automatically lookup for a flat key if a nested key is not found an vice-versa [1584](https://github.com/i18next/i18next/pull/1584) (MAJOR: because of ignoreJSONStructure is true by default)
+
+### 19.9.2
+
+- try to fix another edge case issue [1570](https://github.com/i18next/i18next/issues/1570) introduces by fixing [1552](https://github.com/i18next/i18next/issues/1552)
+
+### 19.9.1
+
+- Fallback on singular defaultValue [1563](https://github.com/i18next/i18next/pull/1563)
+
+### 19.9.0
+
+- Improve updateMissing default plural behavior [1558](https://github.com/i18next/i18next/pull/1558)
+- typescript: type definitions improvements for backend [1560](https://github.com/i18next/i18next/pull/1560)
+
+### 19.8.10
+
+- try to fix another edge case issue [1570](https://github.com/i18next/i18next/issues/1570) introduces by fixing [1552](https://github.com/i18next/i18next/issues/1552)
+
+### 19.8.9
+
+- warn if i18next gets initialized multiple times
+
+### 19.8.8
+
+- fix for cases when calling changeLanguage before finished to initialize [1552](https://github.com/i18next/i18next/issues/1552)
+
+### 19.8.7
+
+- use "Object.prototype.hasOwnProperty" instead of "object.hasOwnProperty", fixes [1542](https://github.com/i18next/i18next/issues/1542)
+
+### 19.8.6
+
+- regression fix because of last prototype pollution fix in v19.8.5
+
+### 19.8.5
+
+- fix potential prototype pollution when backend plugin resolves a malicious language value
+- use fallbackLng as default lng
+
+### 19.8.4
+
+- update format function signature for TS [1520](https://github.com/i18next/i18next/pull/1480))
+
+### 19.8.3
+
+- fix prototype pollution with constructor
+
+### 19.8.2
+
+- allow nesting recursively with context (could theoretically generate infinite loop, prevented in [1480](https://github.com/i18next/i18next/pull/1480))
+
+### 19.8.1
+
+- fix "no languageDetector is used" log statement
+- do not log "initialized" on cloned instances
+
+### 19.8.0
+
+- allow fallbackLng as function [1508](https://github.com/i18next/i18next/pull/1508)
+
+### 19.7.0
+
+- resource manipulation functions are now chainable
+
 ### 19.6.3
 
 - plural rules for ht and iw
