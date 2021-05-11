@@ -41,7 +41,12 @@ function getLastOfPath(object, path, Empty) {
 
     const key = cleanKey(stack.shift());
     if (!object[key] && Empty) object[key] = new Empty();
-    object = object[key];
+    // prevent prototype pollution
+    if (Object.prototype.hasOwnProperty.call(object, key)) {
+      object = object[key];
+    } else {
+      object = {};
+    }
   }
 
   if (canNotTraverseDeeper()) return {};
@@ -84,7 +89,7 @@ export function getPathWithDefaults(data, defaultData, key) {
 export function deepExtend(target, source, overwrite) {
   /* eslint no-restricted-syntax: 0 */
   for (const prop in source) {
-    if (prop !== '__proto__') {
+    if (prop !== '__proto__' && prop !== 'constructor') {
       if (prop in target) {
         // If we reached a leaf string in target or source then replace with source or skip depending on the 'overwrite' switch
         if (

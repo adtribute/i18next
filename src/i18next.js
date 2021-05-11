@@ -129,17 +129,17 @@ class I18n extends EventEmitter {
       });
     }
 
-    if (!this.modules.languageDetector && !this.options.lng) {
+    if (this.options.fallbackLng && !this.services.languageDetector && !this.options.lng) {
+      const codes = this.services.languageUtils.getFallbackCodes(this.options.fallbackLng)
+      if (codes.length > 0 && codes[0] !== 'dev') this.options.lng = codes[0]
+    }
+    if (!this.services.languageDetector && !this.options.lng) {
       this.logger.warn('init: no languageDetector is used and no lng is defined');
     }
 
     // append api
     const storeApi = [
       'getResource',
-      'addResource',
-      'addResources',
-      'addResourceBundle',
-      'removeResourceBundle',
       'hasResourceBundle',
       'getResourceBundle',
       'getDataByLanguage',
@@ -147,18 +147,34 @@ class I18n extends EventEmitter {
     storeApi.forEach(fcName => {
       this[fcName] = (...args) => this.store[fcName](...args);
     });
+    const storeApiChained = [
+      'addResource',
+      'addResources',
+      'addResourceBundle',
+      'removeResourceBundle',
+    ];
+    storeApiChained.forEach(fcName => {
+      this[fcName] = (...args) => {
+        this.store[fcName](...args);
+        return this;
+      };
+    });
 
     const deferred = defer();
 
     const load = () => {
-      this.changeLanguage(this.options.lng, (err, t) => {
+      const finish = (err, t) => {
+        if (this.isInitialized) this.logger.warn('init: i18next is already initialized. You should call init just once!');
         this.isInitialized = true;
-        this.logger.log('initialized', this.options);
+        if (!this.options.isClone) this.logger.log('initialized', this.options);
         this.emit('initialized', this.options);
 
         deferred.resolve(t); // not rejecting on err (as err is only a loading translation failed warning)
         callback(err, t);
-      });
+      };
+      // fix for use cases when calling changeLanguage before finished to initialized (i.e. https://github.com/i18next/i18next/issues/1552)
+      if (this.languages && this.options.compatibilityAPI !== 'v1' && !this.isInitialized) return finish(null, this.t.bind(this));
+      this.changeLanguage(this.options.lng, finish);
     };
 
     if (this.options.resources || !this.options.initImmediate) {

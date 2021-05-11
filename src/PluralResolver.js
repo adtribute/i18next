@@ -4,15 +4,15 @@ import baseLogger from './logger.js';
 /* eslint-disable */
 let sets = [
   { lngs: ['ach','ak','am','arn','br','fil','gun','ln','mfe','mg','mi','oc', 'pt', 'pt-BR',
-    'tg','ti','tr','uz','wa'], nr: [1,2], fc: 1 },
+    'tg', 'tl', 'ti','tr','uz','wa'], nr: [1,2], fc: 1 },
 
   { lngs: ['af','an','ast','az','bg','bn','ca','da','de','dev','el','en',
     'eo','es','et','eu','fi','fo','fur','fy','gl','gu','ha','hi',
-    'hu','hy','ia','it','kn','ku','lb','mai','ml','mn','mr','nah','nap','nb',
+    'hu','hy','ia','it','kk','kn','ku','lb','mai','ml','mn','mr','nah','nap','nb',
     'ne','nl','nn','no','nso','pa','pap','pms','ps','pt-PT','rm','sco',
     'se','si','so','son','sq','sv','sw','ta','te','tk','ur','yo'], nr: [1,2], fc: 2 },
 
-  { lngs: ['ay','bo','cgg','fa','ht','id','ja','jbo','ka','kk','km','ko','ky','lo',
+  { lngs: ['ay','bo','cgg','fa','ht','id','ja','jbo','ka','km','ko','ky','lo',
     'ms','sah','su','th','tt','ug','vi','wo','zh'], nr: [1], fc: 3 },
 
   { lngs: ['be','bs', 'cnr', 'dz','hr','ru','sr','uk'], nr: [1,2,5], fc: 4 },
@@ -102,18 +102,17 @@ class PluralResolver {
   }
 
   getPluralFormsOfKey(code, key) {
-    const ret = [];
+    return this.getSuffixes(code).map((suffix) => key + suffix)
+  }
 
+  getSuffixes(code) {
     const rule = this.getRule(code);
 
-    if (!rule) return ret;
+    if (!rule) {
+      return [];
+    }
 
-    rule.numbers.forEach((n) => {
-      const suffix = this.getSuffix(code, n);
-      ret.push(`${key}${suffix}`);
-    });
-
-    return ret;
+    return rule.numbers.map((number) => this.getSuffix(code, number))
   }
 
   getSuffix(code, count) {

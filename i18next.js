@@ -1,8 +1,8 @@
 (function (global, factory) {
   typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
   typeof define === 'function' && define.amd ? define(factory) :
-  (global = global || self, global.i18next = factory());
-}(this, function () { 'use strict';
+  (global = typeof globalThis !== 'undefined' ? globalThis : global || self, global.i18next = factory());
+}(this, (function () { 'use strict';
 
   function _typeof(obj) {
     "@babel/helpers - typeof";
@@ -315,7 +315,12 @@
       if (canNotTraverseDeeper()) return {};
       var key = cleanKey(stack.shift());
       if (!object[key] && Empty) object[key] = new Empty();
-      object = object[key];
+
+      if (Object.prototype.hasOwnProperty.call(object, key)) {
+        object = object[key];
+      } else {
+        object = {};
+      }
     }
 
     if (canNotTraverseDeeper()) return {};
@@ -360,7 +365,7 @@
   }
   function deepExtend(target, source, overwrite) {
     for (var prop in source) {
-      if (prop !== '__proto__') {
+      if (prop !== '__proto__' && prop !== 'constructor') {
         if (prop in target) {
           if (typeof target[prop] === 'string' || target[prop] instanceof String || typeof source[prop] === 'string' || source[prop] instanceof String) {
             if (overwrite) target[prop] = source[prop];
@@ -397,6 +402,43 @@
   }
   var isIE10 = typeof window !== 'undefined' && window.navigator && window.navigator.userAgent && window.navigator.userAgent.indexOf('MSIE') > -1;
 
+  function deepFind(obj, path) {
+    var keySeparator = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : '.';
+    if (!obj) return undefined;
+    if (obj[path]) return obj[path];
+    var paths = path.split(keySeparator);
+    var current = obj;
+
+    for (var i = 0; i < paths.length; ++i) {
+      if (typeof current[paths[i]] === 'string' && i + 1 < paths.length) {
+        return undefined;
+      }
+
+      if (current[paths[i]] === undefined) {
+        var j = 2;
+        var p = paths.slice(i, i + j).join(keySeparator);
+        var mix = current[p];
+
+        while (mix === undefined && paths.length > i + j) {
+          j++;
+          p = paths.slice(i, i + j).join(keySeparator);
+          mix = current[p];
+        }
+
+        if (mix === undefined) return undefined;
+        if (typeof mix === 'string') return mix;
+        if (p && typeof mix[p] === 'string') return mix[p];
+        var joinedPath = paths.slice(i + j).join(keySeparator);
+        if (joinedPath) return deepFind(mix, joinedPath, keySeparator);
+        return undefined;
+      }
+
+      current = current[paths[i]];
+    }
+
+    return current;
+  }
+
   var ResourceStore = function (_EventEmitter) {
     _inherits(ResourceStore, _EventEmitter);
 
@@ -423,6 +465,10 @@
         _this.options.keySeparator = '.';
       }
 
+      if (_this.options.ignoreJSONStructure === undefined) {
+        _this.options.ignoreJSONStructure = true;
+      }
+
       return _this;
     }
 
@@ -447,6 +493,7 @@
       value: function getResource(lng, ns, key) {
         var options = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : {};
         var keySeparator = options.keySeparator !== undefined ? options.keySeparator : this.options.keySeparator;
+        var ignoreJSONStructure = options.ignoreJSONStructure !== undefined ? options.ignoreJSONStructure : this.options.ignoreJSONStructure;
         var path = [lng, ns];
         if (key && typeof key !== 'string') path = path.concat(key);
         if (key && typeof key === 'string') path = path.concat(keySeparator ? key.split(keySeparator) : key);
@@ -455,7 +502,9 @@
           path = lng.split('.');
         }
 
-        return getPath(this.data, path);
+        var result = getPath(this.data, path);
+        if (result || !ignoreJSONStructure || typeof key !== 'string') return result;
+        return deepFind(this.data && this.data[lng] && this.data[lng][ns], key, keySeparator);
       }
     }, {
       key: "addResource",
@@ -693,21 +742,21 @@
 
           if (keySeparator) {
             var resTypeIsArray = resType === '[object Array]';
-            var copy$$1 = resTypeIsArray ? [] : {};
+            var copy = resTypeIsArray ? [] : {};
             var newKeyToUse = resTypeIsArray ? resExactUsedKey : resUsedKey;
 
             for (var m in res) {
               if (Object.prototype.hasOwnProperty.call(res, m)) {
                 var deepKey = "".concat(newKeyToUse).concat(keySeparator).concat(m);
-                copy$$1[m] = this.translate(deepKey, _objectSpread({}, options, {
+                copy[m] = this.translate(deepKey, _objectSpread({}, options, {
                   joinArrays: false,
                   ns: namespaces
                 }));
-                if (copy$$1[m] === deepKey) copy$$1[m] = res[m];
+                if (copy[m] === deepKey) copy[m] = res[m];
               }
             }
 
-            res = copy$$1;
+            res = copy;
           }
         } else if (handleAsObjectInI18nFormat && typeof joinArrays === 'string' && resType === '[object Array]') {
           res = res.join(joinArrays);
@@ -715,16 +764,14 @@
         } else {
           var usedDefault = false;
           var usedKey = false;
+          var needsPluralHandling = options.count !== undefined && typeof options.count !== 'string';
+          var hasDefaultValue = Translator.hasDefaultValue(options);
+          var defaultValueSuffix = needsPluralHandling ? this.pluralResolver.getSuffix(lng, options.count) : '';
+          var defaultValue = options["defaultValue".concat(defaultValueSuffix)] || options.defaultValue;
 
-          if (!this.isValidLookup(res) && options.defaultValue !== undefined) {
+          if (!this.isValidLookup(res) && hasDefaultValue) {
             usedDefault = true;
-
-            if (options.count !== undefined) {
-              var suffix = this.pluralResolver.getSuffix(lng, options.count);
-              res = options["defaultValue".concat(suffix)];
-            }
-
-            if (!res) res = options.defaultValue;
+            res = defaultValue;
           }
 
           if (!this.isValidLookup(res)) {
@@ -732,10 +779,10 @@
             res = key;
           }
 
-          var updateMissing = options.defaultValue && options.defaultValue !== res && this.options.updateMissing;
+          var updateMissing = hasDefaultValue && defaultValue !== res && this.options.updateMissing;
 
           if (usedKey || usedDefault || updateMissing) {
-            this.logger.log(updateMissing ? 'updateKey' : 'missingKey', lng, namespace, key, updateMissing ? options.defaultValue : res);
+            this.logger.log(updateMissing ? 'updateKey' : 'missingKey', lng, namespace, key, updateMissing ? defaultValue : res);
 
             if (keySeparator) {
               var fk = this.resolve(key, _objectSpread({}, options, {
@@ -757,29 +804,25 @@
               lngs.push(options.lng || this.language);
             }
 
-            var send = function send(l, k) {
+            var send = function send(l, k, fallbackValue) {
               if (_this2.options.missingKeyHandler) {
-                _this2.options.missingKeyHandler(l, namespace, k, updateMissing ? options.defaultValue : res, updateMissing, options);
+                _this2.options.missingKeyHandler(l, namespace, k, updateMissing ? fallbackValue : res, updateMissing, options);
               } else if (_this2.backendConnector && _this2.backendConnector.saveMissing) {
-                _this2.backendConnector.saveMissing(l, namespace, k, updateMissing ? options.defaultValue : res, updateMissing, options);
+                _this2.backendConnector.saveMissing(l, namespace, k, updateMissing ? fallbackValue : res, updateMissing, options);
               }
 
               _this2.emit('missingKey', l, namespace, k, res);
             };
 
             if (this.options.saveMissing) {
-              var needsPluralHandling = options.count !== undefined && typeof options.count !== 'string';
-
               if (this.options.saveMissingPlurals && needsPluralHandling) {
-                lngs.forEach(function (l) {
-                  var plurals = _this2.pluralResolver.getPluralFormsOfKey(l, key);
-
-                  plurals.forEach(function (p) {
-                    return send([l], p);
+                lngs.forEach(function (language) {
+                  _this2.pluralResolver.getSuffixes(language).forEach(function (suffix) {
+                    send([language], key + suffix, options["defaultValue".concat(suffix)] || defaultValue);
                   });
                 });
               } else {
-                send(lngs, key);
+                send(lngs, key, defaultValue);
               }
             }
           }
@@ -827,7 +870,7 @@
               args[_key] = arguments[_key];
             }
 
-            if (lastKey && lastKey[0] === args[0]) {
+            if (lastKey && lastKey[0] === args[0] && !options.context) {
               _this3.logger.warn("It seems you are nesting recursively key: ".concat(args[0], " in key: ").concat(key[0]));
 
               return null;
@@ -929,6 +972,19 @@
         var options = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : {};
         if (this.i18nFormat && this.i18nFormat.getResource) return this.i18nFormat.getResource(code, ns, key, options);
         return this.resourceStore.getResource(code, ns, key, options);
+      }
+    }], [{
+      key: "hasDefaultValue",
+      value: function hasDefaultValue(options) {
+        var prefix = 'defaultValue';
+
+        for (var option in options) {
+          if (Object.prototype.hasOwnProperty.call(options, option) && prefix === option.substring(0, prefix.length) && undefined !== options[option]) {
+            return true;
+          }
+        }
+
+        return false;
       }
     }]);
 
@@ -1044,6 +1100,7 @@
       key: "getFallbackCodes",
       value: function getFallbackCodes(fallbacks, code) {
         if (!fallbacks) return [];
+        if (typeof fallbacks === 'function') fallbacks = fallbacks(code);
         if (typeof fallbacks === 'string') fallbacks = [fallbacks];
         if (Object.prototype.toString.apply(fallbacks) === '[object Array]') return fallbacks;
         if (!code) return fallbacks["default"] || [];
@@ -1091,15 +1148,15 @@
   }();
 
   var sets = [{
-    lngs: ['ach', 'ak', 'am', 'arn', 'br', 'fil', 'gun', 'ln', 'mfe', 'mg', 'mi', 'oc', 'pt', 'pt-BR', 'tg', 'ti', 'tr', 'uz', 'wa'],
+    lngs: ['ach', 'ak', 'am', 'arn', 'br', 'fil', 'gun', 'ln', 'mfe', 'mg', 'mi', 'oc', 'pt', 'pt-BR', 'tg', 'tl', 'ti', 'tr', 'uz', 'wa'],
     nr: [1, 2],
     fc: 1
   }, {
-    lngs: ['af', 'an', 'ast', 'az', 'bg', 'bn', 'ca', 'da', 'de', 'dev', 'el', 'en', 'eo', 'es', 'et', 'eu', 'fi', 'fo', 'fur', 'fy', 'gl', 'gu', 'ha', 'hi', 'hu', 'hy', 'ia', 'it', 'kn', 'ku', 'lb', 'mai', 'ml', 'mn', 'mr', 'nah', 'nap', 'nb', 'ne', 'nl', 'nn', 'no', 'nso', 'pa', 'pap', 'pms', 'ps', 'pt-PT', 'rm', 'sco', 'se', 'si', 'so', 'son', 'sq', 'sv', 'sw', 'ta', 'te', 'tk', 'ur', 'yo'],
+    lngs: ['af', 'an', 'ast', 'az', 'bg', 'bn', 'ca', 'da', 'de', 'dev', 'el', 'en', 'eo', 'es', 'et', 'eu', 'fi', 'fo', 'fur', 'fy', 'gl', 'gu', 'ha', 'hi', 'hu', 'hy', 'ia', 'it', 'kk', 'kn', 'ku', 'lb', 'mai', 'ml', 'mn', 'mr', 'nah', 'nap', 'nb', 'ne', 'nl', 'nn', 'no', 'nso', 'pa', 'pap', 'pms', 'ps', 'pt-PT', 'rm', 'sco', 'se', 'si', 'so', 'son', 'sq', 'sv', 'sw', 'ta', 'te', 'tk', 'ur', 'yo'],
     nr: [1, 2],
     fc: 2
   }, {
-    lngs: ['ay', 'bo', 'cgg', 'fa', 'ht', 'id', 'ja', 'jbo', 'ka', 'kk', 'km', 'ko', 'ky', 'lo', 'ms', 'sah', 'su', 'th', 'tt', 'ug', 'vi', 'wo', 'zh'],
+    lngs: ['ay', 'bo', 'cgg', 'fa', 'ht', 'id', 'ja', 'jbo', 'ka', 'km', 'ko', 'ky', 'lo', 'ms', 'sah', 'su', 'th', 'tt', 'ug', 'vi', 'wo', 'zh'],
     nr: [1],
     fc: 3
   }, {
@@ -1296,17 +1353,24 @@
     }, {
       key: "getPluralFormsOfKey",
       value: function getPluralFormsOfKey(code, key) {
+        return this.getSuffixes(code).map(function (suffix) {
+          return key + suffix;
+        });
+      }
+    }, {
+      key: "getSuffixes",
+      value: function getSuffixes(code) {
         var _this = this;
 
-        var ret = [];
         var rule = this.getRule(code);
-        if (!rule) return ret;
-        rule.numbers.forEach(function (n) {
-          var suffix = _this.getSuffix(code, n);
 
-          ret.push("".concat(key).concat(suffix));
+        if (!rule) {
+          return [];
+        }
+
+        return rule.numbers.map(function (number) {
+          return _this.getSuffix(code, number);
         });
-        return ret;
       }
     }, {
       key: "getSuffix",
@@ -1423,13 +1487,17 @@
         var handleFormat = function handleFormat(key) {
           if (key.indexOf(_this.formatSeparator) < 0) {
             var path = getPathWithDefaults(data, defaultData, key);
-            return _this.alwaysFormat ? _this.format(path, undefined, lng) : path;
+            return _this.alwaysFormat ? _this.format(path, undefined, lng, _objectSpread({}, options, data, {
+              interpolationkey: key
+            })) : path;
           }
 
           var p = key.split(_this.formatSeparator);
           var k = p.shift().trim();
           var f = p.join(_this.formatSeparator).trim();
-          return _this.format(getPathWithDefaults(data, defaultData, k), f, lng, options);
+          return _this.format(getPathWithDefaults(data, defaultData, k), f, lng, _objectSpread({}, options, data, {
+            interpolationkey: k
+          }));
         };
 
         this.resetRegExp();
@@ -1468,8 +1536,16 @@
               value = makeString(value);
             }
 
-            str = str.replace(match[0], todo.safeValue(value));
-            todo.regex.lastIndex = 0;
+            var safeValue = todo.safeValue(value);
+            str = str.replace(match[0], safeValue);
+
+            if (skipOnVariables) {
+              todo.regex.lastIndex += safeValue.length;
+              todo.regex.lastIndex -= match[0].length;
+            } else {
+              todo.regex.lastIndex = 0;
+            }
+
             replaces++;
 
             if (replaces >= _this.maxReplaces) {
@@ -1518,7 +1594,7 @@
           var formatters = [];
           var doReduce = false;
 
-          if (match[0].includes(this.formatSeparator) && !/{.*}/.test(match[1])) {
+          if (match[0].indexOf(this.formatSeparator) !== -1 && !/{.*}/.test(match[1])) {
             var r = match[1].split(this.formatSeparator).map(function (elem) {
               return elem.trim();
             });
@@ -1538,7 +1614,9 @@
 
           if (doReduce) {
             value = formatters.reduce(function (v, f) {
-              return _this2.format(v, f, options.lng, options);
+              return _this2.format(v, f, options.lng, _objectSpread({}, options, {
+                interpolationkey: match[1].trim()
+              }));
             }, value.trim());
           }
 
@@ -2000,11 +2078,16 @@
           });
         }
 
-        if (!this.modules.languageDetector && !this.options.lng) {
+        if (this.options.fallbackLng && !this.services.languageDetector && !this.options.lng) {
+          var codes = this.services.languageUtils.getFallbackCodes(this.options.fallbackLng);
+          if (codes.length > 0 && codes[0] !== 'dev') this.options.lng = codes[0];
+        }
+
+        if (!this.services.languageDetector && !this.options.lng) {
           this.logger.warn('init: no languageDetector is used and no lng is defined');
         }
 
-        var storeApi = ['getResource', 'addResource', 'addResources', 'addResourceBundle', 'removeResourceBundle', 'hasResourceBundle', 'getResourceBundle', 'getDataByLanguage'];
+        var storeApi = ['getResource', 'hasResourceBundle', 'getResourceBundle', 'getDataByLanguage'];
         storeApi.forEach(function (fcName) {
           _this2[fcName] = function () {
             var _this2$store;
@@ -2012,19 +2095,33 @@
             return (_this2$store = _this2.store)[fcName].apply(_this2$store, arguments);
           };
         });
+        var storeApiChained = ['addResource', 'addResources', 'addResourceBundle', 'removeResourceBundle'];
+        storeApiChained.forEach(function (fcName) {
+          _this2[fcName] = function () {
+            var _this2$store2;
+
+            (_this2$store2 = _this2.store)[fcName].apply(_this2$store2, arguments);
+
+            return _this2;
+          };
+        });
         var deferred = defer();
 
         var load = function load() {
-          _this2.changeLanguage(_this2.options.lng, function (err, t) {
+          var finish = function finish(err, t) {
+            if (_this2.isInitialized) _this2.logger.warn('init: i18next is already initialized. You should call init just once!');
             _this2.isInitialized = true;
-
-            _this2.logger.log('initialized', _this2.options);
+            if (!_this2.options.isClone) _this2.logger.log('initialized', _this2.options);
 
             _this2.emit('initialized', _this2.options);
 
             deferred.resolve(t);
             callback(err, t);
-          });
+          };
+
+          if (_this2.languages && _this2.options.compatibilityAPI !== 'v1' && !_this2.isInitialized) return finish(null, _this2.t.bind(_this2));
+
+          _this2.changeLanguage(_this2.options.lng, finish);
         };
 
         if (this.options.resources || !this.options.initImmediate) {
@@ -2379,4 +2476,4 @@
 
   return i18next;
 
-}));
+})));

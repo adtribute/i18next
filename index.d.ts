@@ -1,10 +1,22 @@
+type Omit<T, K> = Pick<T, Exclude<keyof T, K>>;
+type MergeBy<T, K> = Omit<T, keyof K> & K;
+
 export interface FallbackLngObjList {
   [language: string]: string[];
 }
 
-export type FallbackLng = string | string[] | FallbackLngObjList;
+export type FallbackLng =
+  | string
+  | string[]
+  | FallbackLngObjList
+  | ((code: string) => string | string[] | FallbackLngObjList);
 
-export type FormatFunction = (value: any, format?: string, lng?: string) => string;
+export type FormatFunction = (
+  value: any,
+  format?: string,
+  lng?: string,
+  options?: InterpolationOptions & { [key: string]: any },
+) => string;
 
 export interface InterpolationOptions {
   /**
@@ -23,6 +35,11 @@ export interface InterpolationOptions {
    */
   escape?(str: string): string;
 
+  /**
+   * Always format interpolated values.
+   * @default false
+   */
+  alwaysFormat?: boolean;
   /**
    * Escape passed in values to avoid xss injection
    * @default true
@@ -164,7 +181,38 @@ export interface ReactOptions {
   transKeepBasicHtmlNodesFor?: string[];
 }
 
-export interface InitOptions {
+/**
+ * This interface can be augmented by users to add types to `i18next` default PluginOptions.
+ */
+export interface PluginOptions {}
+
+interface DefaultPluginOptions {
+  /**
+   * Options for language detection - check documentation of plugin
+   * @default undefined
+   */
+  detection?: object;
+
+  /**
+   * Options for backend - check documentation of plugin
+   * @default undefined
+   */
+  backend?: object;
+
+  /**
+   * Options for cache layer - check documentation of plugin
+   * @default undefined
+   */
+  cache?: object;
+
+  /**
+   * Options for i18n message format - check documentation of plugin
+   * @default undefined
+   */
+  i18nFormat?: object;
+}
+
+export interface InitOptions extends MergeBy<DefaultPluginOptions, PluginOptions> {
   /**
    * Logs info level to console output. Helps finding issues with loading not working.
    * @default false
@@ -370,30 +418,6 @@ export interface InitOptions {
   interpolation?: InterpolationOptions;
 
   /**
-   * Options for language detection - check documentation of plugin
-   * @default undefined
-   */
-  detection?: object;
-
-  /**
-   * Options for backend - check documentation of plugin
-   * @default undefined
-   */
-  backend?: object;
-
-  /**
-   * Options for cache layer - check documentation of plugin
-   * @default undefined
-   */
-  cache?: object;
-
-  /**
-   * Options for i18n message format - check documentation of plugin
-   * @default undefined
-   */
-  i18nFormat?: object;
-
-  /**
    * Options for react - check documentation of plugin
    * @default undefined
    */
@@ -561,6 +585,12 @@ export interface InitOptions {
      */
     allowedHosts?: string[];
   };
+
+  /**
+   * Automatically lookup for a flat key if a nested key is not found an vice-versa
+   * @default true
+   */
+  ignoreJSONStructure?: boolean;
 }
 
 export interface TOptionsBase {
@@ -729,8 +759,11 @@ export interface Module {
 }
 
 export type CallbackError = Error | null | undefined;
-export type ReadCallback = (err: CallbackError, data: ResourceKey | boolean) => void;
-export type MultiReadCallback = (err: CallbackError, data: Resource) => void;
+export type ReadCallback = (
+  err: CallbackError,
+  data: ResourceKey | boolean | null | undefined,
+) => void;
+export type MultiReadCallback = (err: CallbackError, data: Resource | null | undefined) => void;
 
 /**
  * Used to load data for i18next.
@@ -742,9 +775,9 @@ export interface BackendModule<TOptions = object> extends Module {
   init(services: Services, backendOptions: TOptions, i18nextOptions: InitOptions): void;
   read(language: string, namespace: string, callback: ReadCallback): void;
   /** Save the missing translation */
-  create(languages: string[], namespace: string, key: string, fallbackValue: string): void;
+  create?(languages: string[], namespace: string, key: string, fallbackValue: string): void;
   /** Load multiple languages and namespaces. For backends supporting multiple resources loading */
-  readMulti?(languages: string[], namespaces: string[], callback: ReadCallback): void;
+  readMulti?(languages: string[], namespaces: string[], callback: MultiReadCallback): void;
   /** Store the translation. For backends acting as cache layer */
   save?(language: string, namespace: string, data: ResourceLanguage): void;
 }
@@ -882,7 +915,7 @@ export interface i18n {
    * Changes the language. The callback will be called as soon translations were loaded or an error occurs while loading.
    * HINT: For easy testing - setting lng to 'cimode' will set t function to always return the key.
    */
-  changeLanguage(lng: string, callback?: Callback): Promise<TFunction>;
+  changeLanguage(lng?: string, callback?: Callback): Promise<TFunction>;
 
   /**
    * Is set to the current detected or set language.
@@ -991,7 +1024,12 @@ export interface i18n {
   /**
    * Gets one value by given key.
    */
-  getResource(lng: string, ns: string, key: string, options?: { keySeparator?: string }): any;
+  getResource(
+    lng: string,
+    ns: string,
+    key: string,
+    options?: Pick<InitOptions, 'keySeparator' | 'ignoreJSONStructure'>,
+  ): any;
 
   /**
    * Adds one key/value.
@@ -1002,12 +1040,12 @@ export interface i18n {
     key: string,
     value: string,
     options?: { keySeparator?: string; silent?: boolean },
-  ): void;
+  ): i18n;
 
   /**
    * Adds multiple key/values.
    */
-  addResources(lng: string, ns: string, resources: any): void;
+  addResources(lng: string, ns: string, resources: any): i18n;
 
   /**
    * Adds multiple key/values to be loaded after initialization
@@ -1025,7 +1063,7 @@ export interface i18n {
     resources: any,
     deep?: boolean,
     overwrite?: boolean,
-  ): void;
+  ): i18n;
 
   /**
    * Checks if a resource bundle exists.
@@ -1040,7 +1078,7 @@ export interface i18n {
   /**
    * Removes an existing bundle.
    */
-  removeResourceBundle(lng: string, ns: string): void;
+  removeResourceBundle(lng: string, ns: string): i18n;
 
   /**
    * Current options
