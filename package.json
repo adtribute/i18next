@@ -38,7 +38,7 @@
     "babelify": "^10.0.0",
     "browserify": "14.0.0",
     "browserify-istanbul": "2.0.0",
-    "chai": "3.5.0",
+    "chai": "4.3.4",
     "coveralls": "2.11.16",
     "cpy-cli": "^2.0.0",
     "dtslint": "^0.4.2",
