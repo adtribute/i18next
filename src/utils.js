@@ -35,11 +35,16 @@ function getLastOfPath(object, path, Empty) {
     return !object || typeof object === 'string';
   }
 
+  function isPrototypePollutingKey(key) {
+    return key === '__proto__' || key === 'constructor' || key === 'prototype';
+  }
+
   const stack = typeof path !== 'string' ? [].concat(path) : path.split('.');
   while (stack.length > 1) {
     if (canNotTraverseDeeper()) return {};
 
     const key = cleanKey(stack.shift());
+    if (isPrototypePollutingKey(key)) return {};
     if (!object[key] && Empty) object[key] = new Empty();
     // prevent prototype pollution
     if (Object.prototype.hasOwnProperty.call(object, key)) {
@@ -50,9 +55,11 @@ function getLastOfPath(object, path, Empty) {
   }
 
   if (canNotTraverseDeeper()) return {};
+  const key = cleanKey(stack.shift());
+  if (isPrototypePollutingKey(key)) return {};
   return {
     obj: object,
-    k: cleanKey(stack.shift()),
+    k: key,
   };
 }
 
